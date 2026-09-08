@@ -23,11 +23,13 @@ def scrape_books():
           title = book.find("h3").find("a")["title"]
           price = book.find("p", class_="price_color").get_text(strip=True)
           availability = book.find("p", class_="instock").get_text(strip=True)
+          product_url = urljoin(current_url, book.find("h3").find("a")["href"])
 
           book_details = {
             "title": title,
             "price": price,
-            "availability": availability
+            "availability": availability,
+            "url": product_url
         }
 
           all_book_details.append(book_details)
@@ -45,3 +47,4 @@ def scrape_books():
 books = scrape_books()
 
 print("Total books:", len(books))
+print(books[0])
