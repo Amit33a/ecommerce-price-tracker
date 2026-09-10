@@ -15,6 +15,7 @@ The project is being developed step by step, starting with web scraping fundamen
 * [x] 1.5 Individual Product Page Scraping
 * [x] 1.6 Pagination
 * [x] 1.7 Individual Product URLs
+* [x] 1.8 Product Detail Pages
 
 ## Current Implementation
 
@@ -26,32 +27,42 @@ It can:
 * Handle HTTP errors using `raise_for_status()`
 * Handle UTF-8 response encoding
 * Parse HTML using BeautifulSoup
-* Extract product title, price and availability
+* Extract product information from individual product pages
 * Follow pagination automatically
 * Handle relative URLs using `urljoin()`
 * Extract individual product URLs
-* Convert relative product URLs into absolute URLs
-* Collect scraped products as Python dictionaries
-* Return the collected product data
+* Separate product URL discovery from product detail scraping
+* Extract product title, price, availability and rating
+* Convert availability text into a numeric quantity
+* Convert rating words into numeric values
+* Handle request failures using `try/except`
+* Limit the number of products processed during testing
+* Return structured product data as Python dictionaries
 
-## Test Result
+## Test Results
 
-The scraper successfully collected:
+The scraper successfully discovered:
 
 ```text
 Total books: 1000
 ```
 
-Example record:
+Product detail scraping was successfully tested with 5 products.
+
+Example detailed record:
 
 ```python
 {
     "title": "A Light in the Attic",
     "price": "£51.77",
-    "availability": "In stock",
+    "availability": "In stock (22 available)",
+    "quantity": 22,
+    "rating": 3,
     "url": "https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html"
 }
 ```
+
+The scraper also successfully handled an invalid product URL and reported the resulting HTTP 404 error without stopping the entire process.
 
 ## Project Structure
 
@@ -74,6 +85,24 @@ ecommerce-price-tracker/
 ```
 
 `practice/` contains learning exercises, while `app/` contains the professional implementation.
+
+## Scraper Architecture
+
+The scraper separates product URL discovery from product detail scraping.
+
+```text
+Books listing pages
+        ↓
+scrape_books()
+        ↓
+Product URLs
+        ↓
+scrape_product_details()
+        ↓
+Detailed product dictionaries
+```
+
+This separation makes the scraper easier to test, maintain and extend as the project becomes more advanced.
 
 ## Technologies Used
 

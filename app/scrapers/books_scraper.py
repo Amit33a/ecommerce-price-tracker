@@ -3,16 +3,48 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
 
-def scrape_books():
+def scrape_product_details(product_url):
+    response = requests.get(product_url, timeout=10)
+    response.encoding = "utf-8"
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    title = soup.find("h1").get_text(strip=True)
+    price = soup.find("p", class_="price_color").get_text(strip=True)
+    availability = soup.find("p", class_="instock").get_text(strip=True)
+    available_quantity = int(availability.split()[2].replace("(", ""))
+    rating = soup.find("p", class_="star-rating")["class"][1]
+
+    rating_map = {
+        "One": 1,
+        "Two": 2,
+        "Three": 3,
+        "Four": 4,
+        "Five": 5
+    }
+
+    rating = rating_map[rating]
+
+    product_details = {
+        "title": title,
+        "price": price,
+        "availability": availability,
+        "quantity": available_quantity,
+        "rating": rating,
+        "url": product_url
+    }
+
+    return product_details
+
+def scrape_books(max_products=None):
     url = "https://books.toscrape.com/"
     current_url = url
-    all_book_details = []
+    product_urls = []
 
     while current_url:
         response = requests.get(current_url, timeout=10)
-
         response.encoding = "utf-8"
-
         response.raise_for_status()
 
         soup = BeautifulSoup(response.text, "html.parser")
@@ -20,31 +52,40 @@ def scrape_books():
         books = soup.find_all("article", class_="product_pod")
 
         for book in books:
-          title = book.find("h3").find("a")["title"]
-          price = book.find("p", class_="price_color").get_text(strip=True)
-          availability = book.find("p", class_="instock").get_text(strip=True)
-          product_url = urljoin(current_url, book.find("h3").find("a")["href"])
+            product_url = urljoin(
+                current_url,
+                book.find("h3").find("a")["href"]
+            )
 
-          book_details = {
-            "title": title,
-            "price": price,
-            "availability": availability,
-            "url": product_url
-        }
+            product_urls.append(product_url)
 
-          all_book_details.append(book_details)
+            if max_products and len(product_urls) >= max_products:
+                return product_urls
 
         next_page = soup.find("li", class_="next")
 
         if next_page:
-          next_url = next_page.find("a")["href"]
-          current_url = urljoin(current_url, next_url)
+            next_url = next_page.find("a")["href"]
+            current_url = urljoin(current_url, next_url)
         else:
-          current_url = None
+            current_url = None
 
-    return all_book_details     
+    return product_urls
 
-books = scrape_books()
+product_urls = scrape_books(max_products=5)
 
-print("Total books:", len(books))
-print(books[0])
+all_product_details = []
+
+for product_url in product_urls:
+
+    try:
+        product_details = scrape_product_details(product_url)
+        all_product_details.append(product_details)
+
+    except requests.RequestException as error:
+        print(f"Failed to scrape {product_url}: {error}")
+
+print("Total products:", len(all_product_details))
+
+if all_product_details:
+    print(all_product_details[0])
