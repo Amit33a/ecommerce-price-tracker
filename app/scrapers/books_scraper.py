@@ -1,12 +1,17 @@
-import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
+from app.utils.http_client import request_with_retry
+
 
 def scrape_product_details(product_url):
-    response = requests.get(product_url, timeout=10)
+
+    response = request_with_retry(product_url)
+
+    if response is None:
+        return None
+
     response.encoding = "utf-8"
-    response.raise_for_status()
 
     soup = BeautifulSoup(response.text, "html.parser")
 
@@ -37,15 +42,19 @@ def scrape_product_details(product_url):
 
     return product_details
 
+
 def scrape_books(max_products=None):
     url = "https://books.toscrape.com/"
     current_url = url
     product_urls = []
 
     while current_url:
-        response = requests.get(current_url, timeout=10)
+        response = request_with_retry(current_url)
+
+        if response is None:
+            return product_urls
+
         response.encoding = "utf-8"
-        response.raise_for_status()
 
         soup = BeautifulSoup(response.text, "html.parser")
 
@@ -78,12 +87,10 @@ all_product_details = []
 
 for product_url in product_urls:
 
-    try:
-        product_details = scrape_product_details(product_url)
-        all_product_details.append(product_details)
+    product_details = scrape_product_details(product_url)
 
-    except requests.RequestException as error:
-        print(f"Failed to scrape {product_url}: {error}")
+    if product_details is not None:
+        all_product_details.append(product_details)
 
 print("Total products:", len(all_product_details))
 
