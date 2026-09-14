@@ -2,7 +2,7 @@
 
 A Python backend project for learning and building a production-oriented product price tracking application.
 
-The project is being developed step by step, starting with web scraping fundamentals and gradually introducing backend engineering concepts such as HTTP clients, error handling, retries, testing, data storage, scheduling and APIs.
+The project is being developed step by step, starting with web scraping fundamentals and gradually introducing backend engineering concepts such as HTTP clients, error handling, retries, rate limiting, testing, data storage, scheduling and APIs.
 
 ## Current Progress
 
@@ -20,6 +20,7 @@ The project is being developed step by step, starting with web scraping fundamen
 * [x] 1.10 `requests.Session`
 * [x] 1.11 Cookies & Session State
 * [x] 1.12 Retry Strategy & Transient Network Failures
+* [x] 1.13 Rate Limiting & Polite Scraping
 
 ## Current Implementation
 
@@ -31,6 +32,7 @@ It can:
 * Use shared HTTP headers
 * Configure a User-Agent
 * Configure request timeouts
+* Apply a configurable request delay
 * Handle HTTP errors
 * Retry selected temporary HTTP failures
 * Retry connection errors and timeouts
@@ -67,6 +69,7 @@ The HTTP client currently provides:
 * Shared User-Agent configuration
 * Reusable `requests.Session`
 * Request timeout
+* Request rate limiting
 * Retryable HTTP status handling
 * Connection error handling
 * Timeout handling
@@ -88,6 +91,14 @@ Attempt 2 → wait 2 seconds
 Attempt 3 → wait 4 seconds
 Attempt 4 → stop
 ```
+
+Normal request pacing is currently controlled through:
+
+```python
+REQUEST_DELAY = 1
+```
+
+This introduces a delay between HTTP client calls to avoid making requests unnecessarily quickly during normal scraping.
 
 The HTTP client returns:
 
@@ -119,7 +130,7 @@ The scraper separates HTTP communication, product URL discovery and product deta
                     requests.Session
                            │
                            ↓
-                      Website
+                       Website
 ```
 
 The product scraping flow is:
@@ -134,6 +145,26 @@ Product URLs
 scrape_product_details()
         ↓
 Detailed product dictionaries
+```
+
+The HTTP client is responsible for common HTTP behaviour such as:
+
+```text
+Headers
+Session
+Timeout
+Rate limiting
+Retry
+Exponential backoff
+```
+
+The scraper is responsible for website-specific behaviour such as:
+
+```text
+HTML parsing
+Pagination
+Product URL discovery
+Product data extraction
 ```
 
 This separation makes the scraper easier to test, maintain and extend as the project becomes more advanced.
@@ -180,6 +211,37 @@ If an individual product cannot be retrieved after the configured retry attempts
 
 This allows the rest of the batch to continue processing.
 
+## Rate Limiting
+
+The project includes basic request rate limiting to make normal scraping more controlled and polite.
+
+The delay is currently configured centrally in the HTTP client:
+
+```python
+REQUEST_DELAY = 1
+```
+
+This means the HTTP client waits before making each request.
+
+Rate limiting and retry backoff serve different purposes:
+
+```text
+Rate limiting
+    ↓
+Controls normal request frequency
+
+
+Retry backoff
+    ↓
+Controls waiting after temporary failures
+    ↓
+1 second → 2 seconds → 4 seconds
+```
+
+The project aims to avoid unnecessarily aggressive request patterns while developing responsible scraping behaviour.
+
+The current implementation is intentionally simple and will be improved later if more advanced scheduling or request management becomes necessary.
+
 ## Test Results
 
 The scraper successfully discovered:
@@ -210,6 +272,7 @@ HTTP 200 → successful response
 HTTP 503 → retry with exponential backoff
 HTTP 404 → no retry
 Invalid product → skipped without stopping the batch
+Rate limiting → delay applied before HTTP requests
 ```
 
 ## Project Structure
@@ -231,7 +294,8 @@ ecommerce-price-tracker/
 │   ├── practice_books_pagination.py
 │   ├── practice_headers.py
 │   ├── practice_cookies.py
-│   └── practice_retry.py
+│   ├── practice_retry.py
+│   └── practice_rate_limit.py
 │
 ├── requirements.txt
 ├── .gitignore
@@ -240,14 +304,26 @@ ecommerce-price-tracker/
 
 `practice/` contains learning exercises and experiments, while `app/` contains the reusable project implementation.
 
+The `practice/` directory is excluded from version control and is kept for learning and experimentation.
+
 ## Technologies Used
 
 * Python
 * Requests
 * BeautifulSoup
 * Git
+* GitHub
 
-More technologies will be added as the project develops, including database integration, testing, scheduling and other backend components.
+More technologies will be added as the project develops, including:
+
+* PostgreSQL
+* pytest
+* Docker
+* Logging
+* Scheduling
+* REST APIs
+* Data persistence
+* Production configuration
 
 ## Development Approach
 
@@ -270,3 +346,5 @@ Move to next milestone
 ```
 
 The goal is not simply to build a scraper, but to gradually turn the project into a professional backend application.
+
+Future development will focus on making the system more reliable, testable, maintainable and suitable for real-world backend engineering.

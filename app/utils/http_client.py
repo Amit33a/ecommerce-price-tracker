@@ -11,6 +11,7 @@ RETRYABLE_STATUS_CODES = {429, 502, 503, 504}
 
 DEFAULT_TIMEOUT = 10
 MAX_ATTEMPTS = 4
+REQUEST_DELAY = 1
 
 
 session = requests.Session()
@@ -19,6 +20,9 @@ session.headers.update(HEADERS)
 
 
 def request_with_retry(url):
+
+    time.sleep(REQUEST_DELAY)
+        
     for attempt in range(1, MAX_ATTEMPTS + 1):
 
         try:
