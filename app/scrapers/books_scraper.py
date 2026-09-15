@@ -1,7 +1,15 @@
+import logging
+
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
 from app.utils.http_client import request_with_retry
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+)
 
 
 def scrape_product_details(product_url):
@@ -81,18 +89,24 @@ def scrape_books(max_products=None):
 
     return product_urls
 
-product_urls = scrape_books(max_products=5)
 
-all_product_details = []
+def main():
+    product_urls = scrape_books(max_products=5)
 
-for product_url in product_urls:
+    all_product_details = []
 
-    product_details = scrape_product_details(product_url)
+    for product_url in product_urls:
 
-    if product_details is not None:
-        all_product_details.append(product_details)
+        product_details = scrape_product_details(product_url)
 
-print("Total products:", len(all_product_details))
+        if product_details is not None:
+            all_product_details.append(product_details)
 
-if all_product_details:
-    print(all_product_details[0])
+    print("Total products:", len(all_product_details))
+
+    if all_product_details:
+        print(all_product_details[0])
+
+
+if __name__ == "__main__":
+    main()

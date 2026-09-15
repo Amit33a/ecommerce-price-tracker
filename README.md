@@ -2,7 +2,7 @@
 
 A Python backend project for learning and building a production-oriented product price tracking application.
 
-The project is being developed step by step, starting with web scraping fundamentals and gradually introducing backend engineering concepts such as HTTP clients, error handling, retries, rate limiting, testing, data storage, scheduling and APIs.
+The project is being developed step by step, starting with web scraping fundamentals and gradually introducing backend engineering concepts such as HTTP clients, error handling, retries, rate limiting, logging, testing, data storage, scheduling and APIs.
 
 ## Current Progress
 
@@ -21,6 +21,7 @@ The project is being developed step by step, starting with web scraping fundamen
 * [x] 1.11 Cookies & Session State
 * [x] 1.12 Retry Strategy & Transient Network Failures
 * [x] 1.13 Rate Limiting & Polite Scraping
+* [x] 1.14 Logging
 
 ## Current Implementation
 
@@ -48,6 +49,7 @@ It can:
 * Handle failed product requests without stopping the entire batch
 * Limit the number of products processed during testing
 * Return structured product data as Python dictionaries
+* Log HTTP activity and request failures using Python's `logging` module
 
 ## HTTP Client
 
@@ -76,6 +78,7 @@ The HTTP client currently provides:
 * Exponential backoff
 * Maximum retry attempts
 * Non-retryable HTTP error handling
+* HTTP request logging
 
 Current retryable status codes:
 
@@ -98,7 +101,7 @@ Normal request pacing is currently controlled through:
 REQUEST_DELAY = 1
 ```
 
-This introduces a delay between HTTP client calls to avoid making requests unnecessarily quickly during normal scraping.
+This introduces a delay before each HTTP client request to avoid making requests unnecessarily quickly during normal scraping.
 
 The HTTP client returns:
 
@@ -108,6 +111,64 @@ None     → request ultimately failed
 ```
 
 This keeps HTTP concerns separate from website-specific scraping logic.
+
+## Logging
+
+The project uses Python's built-in `logging` module instead of relying on `print()` statements for operational HTTP messages.
+
+Logging configuration is currently defined by the application entry point in `books_scraper.py`:
+
+```python
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+)
+```
+
+The HTTP client creates a module-specific logger:
+
+```python
+logger = logging.getLogger(__name__)
+```
+
+This allows log messages to identify the module that generated them.
+
+Current logging levels are used as follows:
+
+```text
+INFO
+    Normal HTTP activity
+
+WARNING
+    Temporary/retryable HTTP failures
+    Retry attempts
+
+ERROR
+    Non-retryable request failures
+    Timeouts
+    Connection errors
+    Exhausted retry attempts
+```
+
+Example successful request log:
+
+```text
+2026-09-14 20:21:43,432 | INFO | app.utils.http_client | HTTP 200: https://books.toscrape.com/
+```
+
+The project separates:
+
+```text
+Logger creation
+    ↓
+http_client.py
+
+Logging configuration
+    ↓
+Application entry point
+```
+
+This prevents individual utility modules from controlling the application's global logging configuration.
 
 ## Scraper Architecture
 
@@ -156,6 +217,7 @@ Timeout
 Rate limiting
 Retry
 Exponential backoff
+Logging
 ```
 
 The scraper is responsible for website-specific behaviour such as:
@@ -240,7 +302,7 @@ Controls waiting after temporary failures
 
 The project aims to avoid unnecessarily aggressive request patterns while developing responsible scraping behaviour.
 
-The current implementation is intentionally simple and will be improved later if more advanced scheduling or request management becomes necessary.
+The current implementation is intentionally simple and will be improved later if more advanced request management becomes necessary.
 
 ## Test Results
 
@@ -273,6 +335,14 @@ HTTP 503 → retry with exponential backoff
 HTTP 404 → no retry
 Invalid product → skipped without stopping the batch
 Rate limiting → delay applied before HTTP requests
+```
+
+Logging has been verified for normal successful HTTP requests.
+
+Example:
+
+```text
+INFO | app.utils.http_client | HTTP 200: https://books.toscrape.com/
 ```
 
 ## Project Structure
@@ -311,6 +381,7 @@ The `practice/` directory is excluded from version control and is kept for learn
 * Python
 * Requests
 * BeautifulSoup
+* Python `logging`
 * Git
 * GitHub
 
@@ -319,7 +390,6 @@ More technologies will be added as the project develops, including:
 * PostgreSQL
 * pytest
 * Docker
-* Logging
 * Scheduling
 * REST APIs
 * Data persistence

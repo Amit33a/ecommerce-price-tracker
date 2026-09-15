@@ -1,7 +1,10 @@
+import logging
 import time
 
 import requests
 
+
+logger = logging.getLogger(__name__)
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0"
@@ -22,7 +25,7 @@ session.headers.update(HEADERS)
 def request_with_retry(url):
 
     time.sleep(REQUEST_DELAY)
-        
+
     for attempt in range(1, MAX_ATTEMPTS + 1):
 
         try:
@@ -31,8 +34,12 @@ def request_with_retry(url):
                 timeout=DEFAULT_TIMEOUT
             )
 
+            logger.info(
+                f"HTTP {response.status_code}: {url}"
+            )
+
             if response.status_code in RETRYABLE_STATUS_CODES:
-                print(
+                logger.warning(
                     f"Attempt {attempt}: "
                     f"HTTP {response.status_code}"
                 )
@@ -42,17 +49,17 @@ def request_with_retry(url):
                 return response
 
         except requests.Timeout as error:
-            print(
+            logger.error(
                 f"Attempt {attempt}: timeout - {error}"
             )
 
         except requests.ConnectionError as error:
-            print(
+            logger.error(
                 f"Attempt {attempt}: connection error - {error}"
             )
 
         except requests.RequestException as error:
-            print(
+            logger.error(
                 f"Non-retryable request error: {error}"
             )
             return None
@@ -60,16 +67,14 @@ def request_with_retry(url):
         if attempt < MAX_ATTEMPTS:
             wait_time = 2 ** (attempt - 1)
 
-            print(
+            logger.warning(
                 f"Retrying in {wait_time} seconds..."
             )
 
             time.sleep(wait_time)
 
         else:
-            print("All retry attempts failed.")
+            logger.error("All retry attempts failed.")
 
     return None 
-
-
 
