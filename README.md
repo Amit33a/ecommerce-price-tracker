@@ -2,7 +2,7 @@
 
 A Python backend project for learning and building a production-oriented product price tracking application.
 
-The project is being developed step by step, starting with web scraping fundamentals and gradually introducing backend engineering concepts such as HTTP clients, error handling, retries, rate limiting, logging, testing, data storage, scheduling and APIs.
+The project is being developed step by step, starting with web scraping fundamentals and gradually introducing backend engineering concepts such as HTTP clients, error handling, retries, rate limiting, logging, configuration management, testing, data storage, scheduling and APIs.
 
 ## Current Progress
 
@@ -22,6 +22,7 @@ The project is being developed step by step, starting with web scraping fundamen
 * [x] 1.12 Retry Strategy & Transient Network Failures
 * [x] 1.13 Rate Limiting & Polite Scraping
 * [x] 1.14 Logging
+* [x] 1.15 Request Configuration & Environment Variables
 
 ## Current Implementation
 
@@ -50,6 +51,109 @@ It can:
 * Limit the number of products processed during testing
 * Return structured product data as Python dictionaries
 * Log HTTP activity and request failures using Python's `logging` module
+* Load runtime configuration from environment variables
+* Load local development configuration from a `.env` file
+* Validate configuration before starting scraping
+
+## Configuration Management
+
+Application configuration is centralised in:
+
+```text
+app/
+├── scrapers/
+│   └── books_scraper.py
+│
+└── utils/
+    ├── config.py
+    └── http_client.py
+```
+
+The project uses environment variables to keep operational configuration separate from application logic.
+
+Current configuration values include:
+
+```text
+DEFAULT_TIMEOUT
+MAX_ATTEMPTS
+REQUEST_DELAY
+HEADERS
+RETRYABLE_STATUS_CODES
+```
+
+The configuration layer provides default values for environment variables:
+
+```python
+DEFAULT_TIMEOUT = int(
+    os.getenv("DEFAULT_TIMEOUT", "10")
+)
+
+MAX_ATTEMPTS = int(
+    os.getenv("MAX_ATTEMPTS", "4")
+)
+
+REQUEST_DELAY = int(
+    os.getenv("REQUEST_DELAY", "1")
+)
+```
+
+Configuration is validated before the application starts:
+
+```python
+def validate_config():
+    if DEFAULT_TIMEOUT <= 0:
+        raise ValueError("DEFAULT_TIMEOUT must be greater than 0")
+
+    if MAX_ATTEMPTS <= 0:
+        raise ValueError("MAX_ATTEMPTS must be greater than 0")
+
+    if REQUEST_DELAY < 0:
+        raise ValueError("REQUEST_DELAY cannot be negative")
+```
+
+This allows the application to fail early when invalid configuration is supplied.
+
+## Environment Configuration
+
+Local development configuration is stored in a `.env` file.
+
+Example:
+
+```text
+DEFAULT_TIMEOUT=10
+MAX_ATTEMPTS=4
+REQUEST_DELAY=3
+```
+
+The project uses `python-dotenv` to load these values into the environment.
+
+The configuration flow is:
+
+```text
+.env
+  ↓
+python-dotenv
+  ↓
+Environment variables
+  ↓
+config.py
+  ↓
+Configuration validation
+  ↓
+Application
+```
+
+The real `.env` file is excluded from Git using `.gitignore`.
+
+A safe `.env.example` file is included in the project to document the required configuration:
+
+```text
+DEFAULT_TIMEOUT=10
+MAX_ATTEMPTS=4
+REQUEST_DELAY=1
+```
+
+The `.env` file should not be committed to GitHub because it may contain environment-specific values or secrets in future stages.
 
 ## HTTP Client
 
@@ -61,6 +165,7 @@ app/
 │   └── books_scraper.py
 │
 └── utils/
+    ├── config.py
     └── http_client.py
 ```
 
@@ -95,13 +200,13 @@ Attempt 3 → wait 4 seconds
 Attempt 4 → stop
 ```
 
-Normal request pacing is currently controlled through:
+Normal request pacing is controlled through:
 
-```python
-REQUEST_DELAY = 1
+```text
+REQUEST_DELAY
 ```
 
-This introduces a delay before each HTTP client request to avoid making requests unnecessarily quickly during normal scraping.
+The HTTP client waits before making each request to avoid unnecessarily rapid request patterns during normal scraping.
 
 The HTTP client returns:
 
@@ -153,18 +258,18 @@ ERROR
 Example successful request log:
 
 ```text
-2026-09-14 20:21:43,432 | INFO | app.utils.http_client | HTTP 200: https://books.toscrape.com/
+2026-09-15 21:26:44,669 | INFO | app.utils.http_client | HTTP 200: https://books.toscrape.com/
 ```
 
 The project separates:
 
 ```text
 Logger creation
-    ↓
+      ↓
 http_client.py
 
 Logging configuration
-    ↓
+      ↓
 Application entry point
 ```
 
@@ -179,7 +284,7 @@ The scraper separates HTTP communication, product URL discovery and product deta
                            │
              ┌─────────────┴─────────────┐
              ↓                           ↓
-      Listing page                  Product page
+       Listing page                 Product page
              │                           │
              └─────────────┬─────────────┘
                            ↓
@@ -191,7 +296,7 @@ The scraper separates HTTP communication, product URL discovery and product deta
                     requests.Session
                            │
                            ↓
-                       Website
+                        Website
 ```
 
 The product scraping flow is:
@@ -220,6 +325,15 @@ Exponential backoff
 Logging
 ```
 
+The configuration module is responsible for:
+
+```text
+Environment variables
+Default values
+Configuration loading
+Configuration validation
+```
+
 The scraper is responsible for website-specific behaviour such as:
 
 ```text
@@ -235,7 +349,7 @@ This separation makes the scraper easier to test, maintain and extend as the pro
 
 The project distinguishes between different types of failures.
 
-### Retryable HTTP failures
+### Retryable HTTP Failures
 
 The following status codes are currently considered temporary:
 
@@ -248,7 +362,7 @@ The following status codes are currently considered temporary:
 
 These can be retried using exponential backoff.
 
-### Non-retryable HTTP failures
+### Non-Retryable HTTP Failures
 
 For example:
 
@@ -258,7 +372,7 @@ For example:
 
 is not automatically retried because repeatedly requesting a missing page is unlikely to fix the problem.
 
-### Network failures
+### Network Failures
 
 The HTTP client also handles:
 
@@ -267,7 +381,21 @@ The HTTP client also handles:
 
 These can be retried because the failure may be temporary.
 
-### Partial batch failures
+### Configuration Failures
+
+Invalid configuration is detected before scraping begins.
+
+For example:
+
+```text
+REQUEST_DELAY=-1
+```
+
+causes configuration validation to fail before any HTTP requests are made.
+
+This is an example of **fail-fast configuration validation**.
+
+### Partial Batch Failures
 
 If an individual product cannot be retrieved after the configured retry attempts, the scraper skips that product rather than adding invalid data such as `None` to the final results.
 
@@ -277,26 +405,24 @@ This allows the rest of the batch to continue processing.
 
 The project includes basic request rate limiting to make normal scraping more controlled and polite.
 
-The delay is currently configured centrally in the HTTP client:
+The delay is configured through:
 
-```python
-REQUEST_DELAY = 1
+```text
+REQUEST_DELAY
 ```
-
-This means the HTTP client waits before making each request.
 
 Rate limiting and retry backoff serve different purposes:
 
 ```text
 Rate limiting
-    ↓
+      ↓
 Controls normal request frequency
 
 
 Retry backoff
-    ↓
+      ↓
 Controls waiting after temporary failures
-    ↓
+      ↓
 1 second → 2 seconds → 4 seconds
 ```
 
@@ -337,6 +463,14 @@ Invalid product → skipped without stopping the batch
 Rate limiting → delay applied before HTTP requests
 ```
 
+Configuration has been tested with:
+
+```text
+Environment variable → configuration loaded
+.env → configuration loaded
+Invalid REQUEST_DELAY → application stopped before HTTP requests
+```
+
 Logging has been verified for normal successful HTTP requests.
 
 Example:
@@ -355,6 +489,7 @@ ecommerce-price-tracker/
 │   │   └── books_scraper.py
 │   │
 │   └── utils/
+│       ├── config.py
 │       └── http_client.py
 │
 ├── practice/
@@ -365,16 +500,17 @@ ecommerce-price-tracker/
 │   ├── practice_headers.py
 │   ├── practice_cookies.py
 │   ├── practice_retry.py
-│   └── practice_rate_limit.py
+│   └── practice_environment.py
 │
-├── requirements.txt
+├── .env.example
 ├── .gitignore
+├── requirements.txt
 └── README.md
 ```
 
-`practice/` contains learning exercises and experiments, while `app/` contains the reusable project implementation.
+The local `.env` file is intentionally excluded from version control.
 
-The `practice/` directory is excluded from version control and is kept for learning and experimentation.
+The `practice/` directory contains learning exercises and experiments, while `app/` contains the reusable project implementation.
 
 ## Technologies Used
 
@@ -382,6 +518,7 @@ The `practice/` directory is excluded from version control and is kept for learn
 * Requests
 * BeautifulSoup
 * Python `logging`
+* python-dotenv
 * Git
 * GitHub
 

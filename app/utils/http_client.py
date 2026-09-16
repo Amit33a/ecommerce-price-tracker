@@ -3,18 +3,16 @@ import time
 
 import requests
 
+from app.utils.config import (
+    DEFAULT_TIMEOUT,
+    MAX_ATTEMPTS,
+    REQUEST_DELAY,
+    HEADERS,
+    RETRYABLE_STATUS_CODES
+)
+
 
 logger = logging.getLogger(__name__)
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
-
-RETRYABLE_STATUS_CODES = {429, 502, 503, 504}
-
-DEFAULT_TIMEOUT = 10
-MAX_ATTEMPTS = 4
-REQUEST_DELAY = 1
 
 
 session = requests.Session()

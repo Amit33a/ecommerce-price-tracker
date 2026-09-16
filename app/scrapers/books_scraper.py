@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
 from app.utils.http_client import request_with_retry
+from app.utils.config import validate_config
 
 
 logging.basicConfig(
@@ -91,6 +92,8 @@ def scrape_books(max_products=None):
 
 
 def main():
+    validate_config()
+
     product_urls = scrape_books(max_products=5)
 
     all_product_details = []
