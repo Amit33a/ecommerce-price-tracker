@@ -6,6 +6,8 @@ from urllib.parse import urljoin
 from app.utils.http_client import request_with_retry
 from app.utils.config import validate_config
 
+from app.utils.exceptions import HTTPClientError
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -14,10 +16,13 @@ logging.basicConfig(
 
 
 def scrape_product_details(product_url):
+    try:
+        response = request_with_retry(product_url)
 
-    response = request_with_retry(product_url)
-
-    if response is None:
+    except HTTPClientError as error:
+        logging.error(
+            f"Failed to scrape {product_url}: {error}"
+        )
         return None
 
     response.encoding = "utf-8"
@@ -59,9 +64,6 @@ def scrape_books(max_products=None):
 
     while current_url:
         response = request_with_retry(current_url)
-
-        if response is None:
-            return product_urls
 
         response.encoding = "utf-8"
 

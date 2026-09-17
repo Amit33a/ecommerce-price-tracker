@@ -2,7 +2,7 @@
 
 A Python backend project for learning and building a production-oriented product price tracking application.
 
-The project is being developed step by step, starting with web scraping fundamentals and gradually introducing backend engineering concepts such as HTTP clients, error handling, retries, rate limiting, logging, configuration management, testing, data storage, scheduling and APIs.
+The project is being developed step by step, starting with web scraping fundamentals and gradually introducing backend engineering concepts such as HTTP clients, error handling, retries, rate limiting, logging, configuration management, structured exceptions, testing, data storage, scheduling and APIs.
 
 ## Current Progress
 
@@ -23,6 +23,7 @@ The project is being developed step by step, starting with web scraping fundamen
 * [x] 1.13 Rate Limiting & Polite Scraping
 * [x] 1.14 Logging
 * [x] 1.15 Request Configuration & Environment Variables
+* [x] 1.16 Structured HTTP Exceptions
 
 ## Current Implementation
 
@@ -54,6 +55,8 @@ It can:
 * Load runtime configuration from environment variables
 * Load local development configuration from a `.env` file
 * Validate configuration before starting scraping
+* Translate Requests-specific exceptions into application-specific exceptions
+* Distinguish between timeout, connection, HTTP response and retry-exhaustion failures
 
 ## Configuration Management
 
@@ -66,6 +69,7 @@ app/
 │
 └── utils/
     ├── config.py
+    ├── exceptions.py
     └── http_client.py
 ```
 
@@ -166,6 +170,7 @@ app/
 │
 └── utils/
     ├── config.py
+    ├── exceptions.py
     └── http_client.py
 ```
 
@@ -184,6 +189,7 @@ The HTTP client currently provides:
 * Maximum retry attempts
 * Non-retryable HTTP error handling
 * HTTP request logging
+* Application-specific exception translation
 
 Current retryable status codes:
 
@@ -208,14 +214,116 @@ REQUEST_DELAY
 
 The HTTP client waits before making each request to avoid unnecessarily rapid request patterns during normal scraping.
 
-The HTTP client returns:
+### HTTP Client Contract
+
+The HTTP client follows a clear success/failure contract:
 
 ```text
-Response → successful request
-None     → request ultimately failed
+Successful request
+        ↓
+return Response
+
+
+Failed request
+        ↓
+raise application-specific exception
 ```
 
-This keeps HTTP concerns separate from website-specific scraping logic.
+It no longer uses `None` to represent HTTP-client failures.
+
+This makes failures explicit and gives the calling application useful information about what went wrong.
+
+## Structured HTTP Exceptions
+
+The project defines application-specific HTTP exceptions in:
+
+```text
+app/utils/exceptions.py
+```
+
+The exception hierarchy is:
+
+```text
+HTTPClientError
+├── HTTPTimeoutError
+├── HTTPConnectionError
+├── HTTPResponseError
+└── HTTPRetryExhaustedError
+```
+
+### `HTTPClientError`
+
+Base exception for HTTP-client failures.
+
+### `HTTPTimeoutError`
+
+Raised when a request exceeds the configured timeout.
+
+Example:
+
+```text
+Request timed out after 10 seconds for <url>
+```
+
+### `HTTPConnectionError`
+
+Raised when a connection cannot be established.
+
+The original Requests exception is preserved as the underlying cause.
+
+### `HTTPResponseError`
+
+Raised for non-retryable unsuccessful HTTP responses.
+
+For example:
+
+```text
+404 Not Found
+403 Forbidden
+400 Bad Request
+```
+
+### `HTTPRetryExhaustedError`
+
+Raised when a retryable HTTP failure continues after all configured attempts have been exhausted.
+
+For example:
+
+```text
+503
+ ↓
+retry
+ ↓
+503
+ ↓
+retry
+ ↓
+503
+ ↓
+retry
+ ↓
+503
+ ↓
+HTTPRetryExhaustedError
+```
+
+This creates a clear boundary between the external `requests` library and the rest of the application.
+
+The architecture is:
+
+```text
+Requests library
+       ↓
+Requests-specific exception
+       ↓
+http_client.py
+       ↓
+Application-specific exception
+       ↓
+Scraper/application
+```
+
+This reduces coupling between the scraper and the underlying HTTP library.
 
 ## Logging
 
@@ -323,6 +431,7 @@ Rate limiting
 Retry
 Exponential backoff
 Logging
+Exception translation
 ```
 
 The configuration module is responsible for:
@@ -332,6 +441,12 @@ Environment variables
 Default values
 Configuration loading
 Configuration validation
+```
+
+The exceptions module is responsible for:
+
+```text
+Application-specific HTTP error definitions
 ```
 
 The scraper is responsible for website-specific behaviour such as:
@@ -372,6 +487,8 @@ For example:
 
 is not automatically retried because repeatedly requesting a missing page is unlikely to fix the problem.
 
+Other non-retryable HTTP responses are translated into `HTTPResponseError`.
+
 ### Network Failures
 
 The HTTP client also handles:
@@ -379,7 +496,31 @@ The HTTP client also handles:
 * Connection errors
 * Request timeouts
 
-These can be retried because the failure may be temporary.
+These are translated into application-specific exceptions.
+
+### Retry Exhaustion
+
+When a retryable HTTP failure continues after all configured attempts, the HTTP client raises:
+
+```text
+HTTPRetryExhaustedError
+```
+
+For example:
+
+```text
+HTTP 503
+    ↓
+Attempt 1
+    ↓
+Attempt 2
+    ↓
+Attempt 3
+    ↓
+Attempt 4
+    ↓
+HTTPRetryExhaustedError
+```
 
 ### Configuration Failures
 
@@ -397,7 +538,7 @@ This is an example of **fail-fast configuration validation**.
 
 ### Partial Batch Failures
 
-If an individual product cannot be retrieved after the configured retry attempts, the scraper skips that product rather than adding invalid data such as `None` to the final results.
+If an individual product cannot be retrieved after the configured retry attempts, the scraper catches the application-level `HTTPClientError` and skips that product rather than adding invalid data such as `None` to the final results.
 
 This allows the rest of the batch to continue processing.
 
@@ -453,14 +594,28 @@ Example detailed record:
 }
 ```
 
-The HTTP client has also been tested with:
+The HTTP client has been tested with:
 
 ```text
 HTTP 200 → successful response
 HTTP 503 → retry with exponential backoff
-HTTP 404 → no retry
+HTTP 503 after all attempts → HTTPRetryExhaustedError
+HTTP 404 → HTTPResponseError without retry
+Connection failure → HTTPConnectionError
+Timeout → HTTPTimeoutError
 Invalid product → skipped without stopping the batch
 Rate limiting → delay applied before HTTP requests
+```
+
+A controlled retry-exhaustion test using `httpbin.org/status/503` verified:
+
+```text
+Attempt 1 → HTTP 503
+Attempt 2 → HTTP 503
+Attempt 3 → HTTP 503
+Attempt 4 → HTTP 503
+        ↓
+HTTPRetryExhaustedError
 ```
 
 Configuration has been tested with:
@@ -490,6 +645,7 @@ ecommerce-price-tracker/
 │   │
 │   └── utils/
 │       ├── config.py
+│       ├── exceptions.py
 │       └── http_client.py
 │
 ├── practice/
@@ -500,7 +656,8 @@ ecommerce-price-tracker/
 │   ├── practice_headers.py
 │   ├── practice_cookies.py
 │   ├── practice_retry.py
-│   └── practice_environment.py
+│   ├── practice_environment.py
+│   └── practice_retry_exhaustion.py
 │
 ├── .env.example
 ├── .gitignore

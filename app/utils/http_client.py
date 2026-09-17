@@ -12,6 +12,15 @@ from app.utils.config import (
 )
 
 
+from app.utils.exceptions import (
+    HTTPClientError,
+    HTTPConnectionError,
+    HTTPTimeoutError,
+    HTTPResponseError,
+    HTTPRetryExhaustedError
+)
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,25 +52,40 @@ def request_with_retry(url):
                 )
 
             else:
-                response.raise_for_status()
-                return response
+                try:
+                    response.raise_for_status()
+                    return response
+                except requests.HTTPError as error:
+                    raise HTTPResponseError(
+                        f"HTTP {response.status_code} for {url}"
+                    ) from error
 
         except requests.Timeout as error:
             logger.error(
                 f"Attempt {attempt}: timeout - {error}"
             )
+            raise HTTPTimeoutError(
+                f"Request timed out after {DEFAULT_TIMEOUT} seconds for {url}"
+            ) from error
 
         except requests.ConnectionError as error:
             logger.error(
                 f"Attempt {attempt}: connection error - {error}"
             )
+            raise HTTPConnectionError(
+                f"Failed to connect to {url}: {error}"
+            ) from error
+
 
         except requests.RequestException as error:
             logger.error(
                 f"Non-retryable request error: {error}"
             )
-            return None
+            raise HTTPClientError(
+                f"HTTP request failed for {url}: {error}"
+            ) from error
 
+        
         if attempt < MAX_ATTEMPTS:
             wait_time = 2 ** (attempt - 1)
 
@@ -73,6 +97,8 @@ def request_with_retry(url):
 
         else:
             logger.error("All retry attempts failed.")
-
-    return None 
+            raise HTTPRetryExhaustedError(
+                f"All retry attempts failed for {url} "
+                f"with HTTP {response.status_code}"
+            )
 
